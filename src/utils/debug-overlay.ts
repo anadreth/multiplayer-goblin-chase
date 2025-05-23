@@ -13,6 +13,7 @@ export interface DebugOverlayOptions {
   backgroundColor: string;
   fontSize: number;
   padding: number;
+  fpsUpdateIntervalMs: number;
 }
 
 /**
@@ -25,6 +26,7 @@ const DEFAULT_OPTIONS: DebugOverlayOptions = {
   backgroundColor: 'rgba(0, 0, 0, 0.5)',
   fontSize: 14,
   padding: 10,
+  fpsUpdateIntervalMs: 500,
 };
 
 /**
@@ -35,7 +37,7 @@ export class DebugOverlay {
   private frameCount: number = 0;
   private fps: number = 0;
   private lastFpsUpdate: number = 0;
-  private fpsUpdateInterval: number = 500; // Update FPS display every 500ms
+  // Constants are now from options
   private metrics: Map<string, string | number> = new Map();
 
   /**
@@ -58,7 +60,7 @@ export class DebugOverlay {
     this.frameCount++;
 
     // Update FPS counter every interval
-    if (currentTime - this.lastFpsUpdate >= this.fpsUpdateInterval) {
+    if (currentTime - this.lastFpsUpdate >= this.options.fpsUpdateIntervalMs) {
       // Calculate FPS: frames / seconds
       const elapsedSeconds = (currentTime - this.lastFpsUpdate) / 1000;
       this.fps = Math.round(this.frameCount / elapsedSeconds);
@@ -87,7 +89,11 @@ export class DebugOverlay {
    * @param ctx - Canvas rendering context
    */
   public render(ctx: CanvasRenderingContext2D): void {
-    if (!this.options.enabled || !ctx) return;
+    if (!this.options.enabled) return;
+    if (!ctx) {
+      console.warn('DebugOverlay: Cannot render without a valid canvas context');
+      return;
+    }
 
     const { textColor, backgroundColor, fontSize, padding, position } = this.options;
     const canvas = ctx.canvas;
@@ -100,7 +106,8 @@ export class DebugOverlay {
 
     // Calculate metrics for rendering
     ctx.font = `${fontSize}px monospace`;
-    const lineHeight = fontSize * 1.2;
+    const LINE_HEIGHT_SCALE: number = 1.2;
+    const lineHeight: number = fontSize * LINE_HEIGHT_SCALE;
     const maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
     const boxWidth = maxWidth + padding * 2;
     const boxHeight = lines.length * lineHeight + padding * 2;
@@ -143,9 +150,10 @@ export class DebugOverlay {
   }
 
   /**
-   * Toggle the debug overlay visibility
+   * Toggle the debug overlay visibility or set it explicitly
+   * @param forceState - Optional boolean to explicitly set the enabled state
    */
-  public toggle(): void {
-    this.options.enabled = !this.options.enabled;
+  public toggle(forceState?: boolean): void {
+    this.options.enabled = forceState !== undefined ? forceState : !this.options.enabled;
   }
 }
