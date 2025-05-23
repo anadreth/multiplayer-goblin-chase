@@ -2,7 +2,7 @@
  * Map Generator - Generates tile-based maps procedurally
  */
 import { TileType, DEFAULT_MAP_WIDTH, DEFAULT_MAP_HEIGHT, TILE_WIDTH, TILE_HEIGHT } from '../../constants/game-constants';
-import { GameMap, Tile, MapGenerationParams, DEFAULT_GENERATION_PARAMS, GrassDetails, SwampDetails, WaterDetails } from './map-types';
+import { GameMap, Tile, MapGenerationParams, DEFAULT_GENERATION_PARAMS, GrassDetails, SwampDetails, WaterDetails, TileDetails } from './map-types';
 
 /**
  * Creates grass details for a tile
@@ -136,12 +136,60 @@ export const createEmptyMap = (width = DEFAULT_MAP_WIDTH, height = DEFAULT_MAP_H
 };
 
 /**
+ * Creates a deep clone of a tile
+ * @param tile - The tile to clone
+ * @returns A new tile with the same properties
+ */
+const cloneTile = (tile: Tile): Tile => {
+  // Clone tile details based on type
+  let clonedDetails: TileDetails;
+  
+  if (tile.type === TileType.GRASS) {
+    const details = tile.details as GrassDetails;
+    clonedDetails = {
+      blades: details.blades.map(blade => ({...blade}))
+    };
+  } else if (tile.type === TileType.SWAMP) {
+    const details = tile.details as SwampDetails;
+    clonedDetails = {
+      puddles: details.puddles.map(puddle => ({...puddle}))
+    };
+  } else { // Must be water
+    const details = tile.details as WaterDetails;
+    clonedDetails = {
+      waves: details.waves.map(wave => ({
+        offsetY: wave.offsetY,
+        amplitudes: [...wave.amplitudes]
+      }))
+    };
+  }
+  
+  // Return a new tile with cloned properties
+  return {
+    type: tile.type,
+    x: tile.x,
+    y: tile.y,
+    walkable: tile.walkable,
+    movementSpeed: tile.movementSpeed,
+    details: clonedDetails
+  };
+};
+
+/**
  * Applies a smoothing pass to the map to create more natural terrain
  * @param map - The map to smooth
  * @returns The smoothed map
  */
 const smoothMap = (map: GameMap): GameMap => {
-  const newTiles = JSON.parse(JSON.stringify(map.tiles)) as Tile[][];
+  // Create a new 2D array for tiles with proper deep cloning
+  const newTiles: Tile[][] = Array(map.height).fill(null).map(() => Array(map.width).fill(null));
+  
+  // Initialize with cloned tiles
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      newTiles[y][x] = cloneTile(map.tiles[y][x]);
+    }
+  }
   
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
