@@ -5,6 +5,7 @@ import { TileType } from '../../constants/game-constants';
 import { GameMap } from '../map/map-types';
 import { Direction, InputState, Player } from './player-types';
 import { calculateIsometricPosition } from '../map/map-renderer';
+import { generateUUID } from '../../utils/id/uuid';
 
 /**
  * Generates a random player name
@@ -21,47 +22,86 @@ const generatePlayerName = (): string => {
 };
 
 /**
- * Generate a unique ID
- * @returns Unique ID string
+ * Generate a unique ID for a player
+ * @returns Unique ID string using RFC4122 compliant UUID
  */
-const generateId = (): string => {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+const generatePlayerId = (): string => {
+  return generateUUID();
 };
 
 /**
- * Find a valid starting position for the player
+ * Error thrown when no valid starting position can be found
+ */
+class NoValidPositionError extends Error {
+  constructor(message = 'Could not find a valid starting position on the map') {
+    super(message);
+    this.name = 'NoValidPositionError';
+  }
+}
+
+/**
+ * Optimized method to find a valid starting position for the player
+ * Uses expanding rings from center for natural placement and improves performance
  * @param map Game map
  * @returns Valid starting position {gridX, gridY}
+ * @throws NoValidPositionError if no valid position can be found
  */
 const findValidStartPosition = (map: GameMap): { gridX: number; gridY: number } => {
+  if (!map || !map.tiles || map.tiles.length === 0) {
+    throw new NoValidPositionError('Map is empty or undefined');
+  }
+  
   // Try to find a grass tile near the center of the map
   const centerX = Math.floor(map.width / 2);
   const centerY = Math.floor(map.height / 2);
   
+  // If the center is walkable, use it (optimization for common case)
+  if (centerY < map.tiles.length && 
+      centerX < map.tiles[centerY].length && 
+      map.tiles[centerY][centerX].walkable) {
+    return { gridX: centerX, gridY: centerY };
+  }
+  
+  // Set a reasonable maximum search radius to avoid excessive computation
+  const maxSearchRadius = Math.min(100, Math.max(map.width, map.height));
+  
   // Search in expanding rings from the center
-  for (let ring = 0; ring < Math.max(map.width, map.height); ring++) {
-    // Check each tile in the current ring
-    for (let y = centerY - ring; y <= centerY + ring; y++) {
-      for (let x = centerX - ring; x <= centerX + ring; x++) {
-        // Skip if not on the ring's perimeter
-        if (ring > 0 && y > centerY - ring && y < centerY + ring && x > centerX - ring && x < centerX + ring) {
-          continue;
-        }
-        
-        // Skip if out of bounds
-        if (x < 0 || y < 0 || x >= map.width || y >= map.height) {
-          continue;
-        }
-        
-        // If we find a walkable tile, return it
-        if (map.tiles[y][x].walkable) {
-          return { gridX: x, gridY: y };
-        }
+  for (let ring = 1; ring < maxSearchRadius; ring++) {
+    // Only check the perimeter of each ring for efficiency
+    // Top and bottom rows of the ring
+    for (let x = centerX - ring; x <= centerX + ring; x++) {
+      // Top row
+      const topY = centerY - ring;
+      if (isInBounds(map, x, topY) && map.tiles[topY][x].walkable) {
+        return { gridX: x, gridY: topY };
+      }
+      
+      // Bottom row
+      const bottomY = centerY + ring;
+      if (isInBounds(map, x, bottomY) && map.tiles[bottomY][x].walkable) {
+        return { gridX: x, gridY: bottomY };
+      }
+    }
+    
+    // Left and right columns of the ring (excluding corners which were covered above)
+    for (let y = centerY - ring + 1; y <= centerY + ring - 1; y++) {
+      // Left column
+      const leftX = centerX - ring;
+      if (isInBounds(map, leftX, y) && map.tiles[y][leftX].walkable) {
+        return { gridX: leftX, gridY: y };
+      }
+      
+      // Right column
+      const rightX = centerX + ring;
+      if (isInBounds(map, rightX, y) && map.tiles[y][rightX].walkable) {
+        return { gridX: rightX, gridY: y };
       }
     }
   }
   
-  // Fallback to the first walkable tile we can find
+  // If we couldn't find a position in the rings, scan the entire map
+  // This is our fallback, but is expensive for large maps
+  console.warn('Ring search failed, falling back to full map scan for valid position');
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       if (map.tiles[y][x].walkable) {
@@ -70,8 +110,19 @@ const findValidStartPosition = (map: GameMap): { gridX: number; gridY: number } 
     }
   }
   
-  // If no walkable tiles (shouldn't happen), return the top left
-  return { gridX: 0, gridY: 0 };
+  // If no walkable tiles found, throw an error
+  throw new NoValidPositionError('Map contains no walkable tiles');
+};
+
+/**
+ * Helper function to check if coordinates are within map bounds
+ * @param map Game map
+ * @param x X coordinate
+ * @param y Y coordinate
+ * @returns True if coordinates are within bounds
+ */
+const isInBounds = (map: GameMap, x: number, y: number): boolean => {
+  return x >= 0 && y >= 0 && x < map.width && y < map.height;
 };
 
 /**
@@ -89,7 +140,7 @@ export const createPlayer = (map: GameMap, name?: string): Player => {
   
   // Create a player
   return {
-    id: generateId(),
+    id: generatePlayerId(),
     name: name || generatePlayerName(),
     position: {
       gridX,
@@ -229,9 +280,13 @@ export const updatePlayerMovement = (
       player.position.gridX = targetX;
       player.position.gridY = targetY;
       
-      // Reset moving flag since we've immediately moved to the destination
-      // This allows the player to move again on the next frame
-      player.movement.isMoving = false;
+      // We need to use a proper state transition instead of immediately resetting
+      // Use a small timeout to ensure the moving state is respected by other systems
+      // This creates a more natural feel for movement and prevents input issues
+      setTimeout(() => {
+        player.movement.isMoving = false;
+        console.log('Player movement complete - ready for next input');
+      }, 50);
     }
   }
 };
@@ -287,6 +342,10 @@ export class PlayerSystem {
   private map: GameMap;
   private ctx: CanvasRenderingContext2D;
   
+  // Store event handler references for proper cleanup
+  private keyDownHandler: (e: KeyboardEvent) => void = () => {};
+  private keyUpHandler: (e: KeyboardEvent) => void = () => {};
+  
   /**
    * Create a new player system
    * @param ctx Canvas rendering context
@@ -317,7 +376,12 @@ export class PlayerSystem {
    */
   private setupInputHandlers(): void {
     // Keyboard event handler for key down
-    const handleKeyDown = (e: KeyboardEvent): void => {
+    this.keyDownHandler = (e: KeyboardEvent): void => {
+      // Prevent default browser behavior for arrow keys
+      if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+      }
+      
       switch (e.key.toLowerCase()) {
         case 'w':
         case 'arrowup':
@@ -339,7 +403,7 @@ export class PlayerSystem {
     };
     
     // Keyboard event handler for key up
-    const handleKeyUp = (e: KeyboardEvent): void => {
+    this.keyUpHandler = (e: KeyboardEvent): void => {
       switch (e.key.toLowerCase()) {
         case 'w':
         case 'arrowup':
@@ -361,8 +425,10 @@ export class PlayerSystem {
     };
     
     // Add event listeners
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('keydown', this.keyDownHandler);
+    window.addEventListener('keyup', this.keyUpHandler);
+    
+    console.log('Input handlers set up for player controls');
   }
   
   /**
@@ -412,9 +478,18 @@ export class PlayerSystem {
   
   /**
    * Clean up resources when destroying the player system
+   * Removes event listeners to prevent memory leaks
    */
   public cleanup(): void {
-    // Remove event listeners if needed
-    // (Modern browsers handle this automatically when the page unloads)
+    console.log('Cleaning up player system resources');
+    
+    // Remove event listeners to prevent memory leaks
+    if (this.keyDownHandler) {
+      window.removeEventListener('keydown', this.keyDownHandler);
+    }
+    
+    if (this.keyUpHandler) {
+      window.removeEventListener('keyup', this.keyUpHandler);
+    }
   }
 }
