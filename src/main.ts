@@ -3,6 +3,7 @@
  * Initializes the canvas and starts the render loop
  */
 import { DebugOverlay } from './utils/debug-overlay';
+import { ROTATION_SPEED } from './constants/game-constants';
 
 // Canvas setup
 const canvas = document.querySelector('#game-canvas') as HTMLCanvasElement;
@@ -27,12 +28,9 @@ setCanvasSize();
 window.addEventListener('resize', setCanvasSize);
 
 // Clean up event listener when page unloads
-window.addEventListener('beforeunload', () => {
+window.addEventListener('unload', () => {
   window.removeEventListener('resize', setCanvasSize);
 });
-
-// Game constants
-const ROTATION_SPEED = 0.001; // radians per millisecond
 
 // Game loop variables
 let frameCount = 0;
@@ -45,7 +43,9 @@ let totalRotation = 0; // Track total rotation angle
  */
 const gameLoop = (currentTime: number): void => {
   // Calculate delta time (ms)
-  const delta = Math.max(0, currentTime - lastTime); // Prevent negative delta
+  // In rare cases, when browser tab loses focus or when the browser throttles inactive tabs,
+  // the timestamp might be inconsistent, causing negative delta values
+  const delta = Math.max(0, currentTime - lastTime);
   lastTime = currentTime;
   
   // Update debug overlay
@@ -80,11 +80,12 @@ const gameLoop = (currentTime: number): void => {
 };
 
 /**
- * Start the game loop
+ * Initialize the game loop
+ * Only called once at startup
  */
-const startGameLoop = (): void => {
+const initializeGameLoop = (): void => {
   requestAnimationFrame(gameLoop);
 };
 
 // Initialize the game
-startGameLoop();
+initializeGameLoop();

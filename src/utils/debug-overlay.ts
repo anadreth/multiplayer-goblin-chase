@@ -2,6 +2,7 @@
  * Debug overlay utility for displaying performance metrics
  * Uses Canvas API to render metrics in the corner of the screen
  */
+import { LINE_HEIGHT_SCALE, DEBUG_OVERLAY_UPDATE_INTERVAL_MS } from '../constants/game-constants';
 
 /**
  * Configuration options for the debug overlay
@@ -26,7 +27,7 @@ const DEFAULT_OPTIONS: DebugOverlayOptions = {
   backgroundColor: 'rgba(0, 0, 0, 0.5)',
   fontSize: 14,
   padding: 10,
-  fpsUpdateIntervalMs: 500,
+  fpsUpdateIntervalMs: DEBUG_OVERLAY_UPDATE_INTERVAL_MS,
 };
 
 /**
@@ -37,7 +38,6 @@ export class DebugOverlay {
   private frameCount: number = 0;
   private fps: number = 0;
   private lastFpsUpdate: number = 0;
-  // Constants are now from options
   private metrics: Map<string, string | number> = new Map();
 
   /**
@@ -91,8 +91,7 @@ export class DebugOverlay {
   public render(ctx: CanvasRenderingContext2D): void {
     if (!this.options.enabled) return;
     if (!ctx) {
-      console.warn('DebugOverlay: Cannot render without a valid canvas context');
-      return;
+      throw new Error('DebugOverlay: Cannot render without a valid canvas context');
     }
 
     const { textColor, backgroundColor, fontSize, padding, position } = this.options;
@@ -106,8 +105,7 @@ export class DebugOverlay {
 
     // Calculate metrics for rendering
     ctx.font = `${fontSize}px monospace`;
-    const LINE_HEIGHT_SCALE: number = 1.2;
-    const lineHeight: number = fontSize * LINE_HEIGHT_SCALE;
+    const lineHeight = fontSize * LINE_HEIGHT_SCALE;
     const maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
     const boxWidth = maxWidth + padding * 2;
     const boxHeight = lines.length * lineHeight + padding * 2;
@@ -154,6 +152,6 @@ export class DebugOverlay {
    * @param forceState - Optional boolean to explicitly set the enabled state
    */
   public toggle(forceState?: boolean): void {
-    this.options.enabled = forceState !== undefined ? forceState : !this.options.enabled;
+    this.options.enabled = forceState ?? !this.options.enabled;
   }
 }
