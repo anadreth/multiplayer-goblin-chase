@@ -28,7 +28,7 @@ setCanvasSize();
 window.addEventListener('resize', setCanvasSize);
 
 // Clean up event listener when page unloads
-window.addEventListener('unload', () => {
+window.addEventListener('beforeunload', () => {
   window.removeEventListener('resize', setCanvasSize);
 });
 
@@ -38,14 +38,24 @@ let lastTime = 0;
 let totalRotation = 0; // Track total rotation angle
 
 /**
+ * Calculate delta time between frames with protection against negative values
+ * @param currentTime - Current timestamp from requestAnimationFrame
+ * @param previousTime - Previous frame timestamp
+ * @returns Non-negative delta time in milliseconds
+ */
+const calculateDelta = (currentTime: number, previousTime: number): number => {
+  // In rare cases, when browser tab loses focus or when the browser throttles inactive tabs,
+  // the timestamp might be inconsistent, causing negative delta values
+  return Math.max(0, currentTime - previousTime);
+};
+
+/**
  * Main render loop using requestAnimationFrame
  * @param currentTime - Current timestamp
  */
 const gameLoop = (currentTime: number): void => {
   // Calculate delta time (ms)
-  // In rare cases, when browser tab loses focus or when the browser throttles inactive tabs,
-  // the timestamp might be inconsistent, causing negative delta values
-  const delta = Math.max(0, currentTime - lastTime);
+  const delta = calculateDelta(currentTime, lastTime);
   lastTime = currentTime;
   
   // Update debug overlay
