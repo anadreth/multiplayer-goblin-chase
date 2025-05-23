@@ -3,8 +3,8 @@
  * Initializes the canvas and starts the render loop
  */
 import { DebugOverlay } from './utils/debug-overlay';
-import { ROTATION_SPEED } from './constants/game-constants';
 import { MapSystem } from './game/map/map-system';
+import { PlayerSystem } from './game/player/player-system';
 
 // Canvas setup
 const canvas = document.querySelector('#game-canvas') as HTMLCanvasElement;
@@ -32,19 +32,23 @@ window.addEventListener('resize', setCanvasSize);
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('resize', setCanvasSize);
   
-  // Clean up map system
+  // Clean up game systems
   if (mapSystem) {
     mapSystem.cleanup();
+  }
+  
+  if (playerSystem) {
+    playerSystem.cleanup();
   }
 });
 
 // Game loop variables
 let frameCount = 0;
 let lastTime = 0;
-let totalRotation = 0; // Track total rotation angle
 
-// Initialize map system
+// Game systems
 let mapSystem: MapSystem | null = null;
+let playerSystem: PlayerSystem | null = null;
 
 /**
  * Calculate delta time between frames with protection against negative values
@@ -70,9 +74,10 @@ const gameLoop = (currentTime: number): void => {
   // Update debug overlay
   debugOverlay.update(currentTime, delta);
   
-  // Use delta for frame-rate independent animation
-  totalRotation += ROTATION_SPEED * delta;
-  totalRotation %= Math.PI * 2; // Keep within 0-2π range for precision
+  // Update game systems
+  if (playerSystem) {
+    playerSystem.update(currentTime);
+  }
   
   // Clear canvas
   if (ctx) {
@@ -82,6 +87,11 @@ const gameLoop = (currentTime: number): void => {
     // Render the map
     if (mapSystem) {
       mapSystem.render();
+      
+      // Render the player (after the map)
+      if (playerSystem) {
+        playerSystem.render();
+      }
     }
     
     // Increment frame count
@@ -100,9 +110,29 @@ const gameLoop = (currentTime: number): void => {
  * Only called once at startup
  */
 const initializeGameLoop = (): void => {
-  // Initialize map system if we have a context
+  // Initialize game systems if we have a context
   if (ctx) {
+    // Create map system first
     mapSystem = new MapSystem(ctx);
+    
+    // Create player system with reference to the map
+    if (mapSystem) {
+      const map = mapSystem.getMap();
+      playerSystem = new PlayerSystem(ctx, map);
+      
+      // Handle map regeneration to ensure player position is updated
+      // We can safely use non-null assertion here as we've already checked mapSystem above
+      const originalRegenerateMap = mapSystem.regenerateMap.bind(mapSystem);
+      mapSystem.regenerateMap = (params) => {
+        // Call the original method first
+        originalRegenerateMap(params);
+        
+        // Update player's map reference after regeneration
+        if (playerSystem && mapSystem) {
+          playerSystem.setMap(mapSystem.getMap());
+        }
+      };
+    }
   }
   
   requestAnimationFrame(gameLoop);
