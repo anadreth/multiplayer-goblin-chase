@@ -4,6 +4,7 @@
  */
 import { DebugOverlay } from './utils/debug-overlay';
 import { ROTATION_SPEED } from './constants/game-constants';
+import { MapSystem } from './game/map/map-system';
 
 // Canvas setup
 const canvas = document.querySelector('#game-canvas') as HTMLCanvasElement;
@@ -30,12 +31,20 @@ window.addEventListener('resize', setCanvasSize);
 // Clean up event listener when page unloads
 window.addEventListener('beforeunload', () => {
   window.removeEventListener('resize', setCanvasSize);
+  
+  // Clean up map system
+  if (mapSystem) {
+    mapSystem.cleanup();
+  }
 });
 
 // Game loop variables
 let frameCount = 0;
 let lastTime = 0;
 let totalRotation = 0; // Track total rotation angle
+
+// Initialize map system
+let mapSystem: MapSystem | null = null;
 
 /**
  * Calculate delta time between frames with protection against negative values
@@ -70,13 +79,10 @@ const gameLoop = (currentTime: number): void => {
     ctx.fillStyle = '#222';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw a rotating indicator to show animation is working
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate(totalRotation);
-    ctx.fillStyle = '#4CAF50';
-    ctx.fillRect(-25, -25, 50, 50);
-    ctx.restore();
+    // Render the map
+    if (mapSystem) {
+      mapSystem.render();
+    }
     
     // Increment frame count
     frameCount++;
@@ -94,6 +100,11 @@ const gameLoop = (currentTime: number): void => {
  * Only called once at startup
  */
 const initializeGameLoop = (): void => {
+  // Initialize map system if we have a context
+  if (ctx) {
+    mapSystem = new MapSystem(ctx);
+  }
+  
   requestAnimationFrame(gameLoop);
 };
 

@@ -64,7 +64,7 @@ foreach ($comment in $prComments) {
     }
 }
 
-foreach ($file in $fileComments.Keys | Sort-Object) {
+foreach ($file in $fileComments.Keys | Sort-Object) { 
     $summary += "### $file\n\n"
     
     foreach ($comment in $fileComments[$file] | Sort-Object -Property line) {
